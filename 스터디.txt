@@ -1,0 +1,241 @@
+* Query DSL
+
+0. 사전 학습
+ 1) DSL(Domain-specific language)
+  - 특정한 도메인을 적용하는데 특화된 컴퓨터 언어이다. 
+    이는 어느 도메인에서나 적용 가능한 범용 언어(General-purpose language)와는 반대되는 개념이다.
+ 2) 장점
+  - 도메인 특화 언어는 도메인 수준에서 검증, 확인이 가능하다. 
+    언어의 구조가 안정적이라면, 그 언어에서 쓰여진 문장은 그 분야의 사람들이 이해하는데 불편함이 없다.
+    도메인 특화 언어는 비즈니스 정보 체계의 개발을 전통적인 소프트웨어 개발자들에게서 도메인에 깊은 지식을 가지고 있는 
+    더 큰 도메인 전문가 그룹으로 옮기는데 도움을 준다.
+ 3) 단점
+ - 새로운 언어를 배워야 한다는 초기 비용과 매우 좁은 적용분야.
+   도메인 특화 언어를 설계, 구현, 유지 하는데 드는 비용. 또한 그것으로 개발하기 위한 툴 개발 비용. 예제를 찾아보기 힘듦.
+
+1. 개요 
+ - Elasticsearch는 JSON에 기반한 full Query DSL(Domain Spectific Language)를 제공하여 쿼리를 정의 합니다. 
+   Leaf Query Clauses 와 Compound query clauses, 2가지 유형의 절로 구성 됩니다.
+ - Leaf Query Clauses 는 match, term 또는 range 처럼 특정 필드에서 특정 값을 찾으며, 자체적으로 사용할 수 있습니다.
+ - Compound query clauses 는 다른 leaf query 또는 Compound query 를 감싸고, bool 또는 dis_max 처럼 논리적인 방식으로 여러 쿼리를 결합 하는데 사용되어 지거나,
+   constant_score 처럼 그들의 행동을 바구기 위해 사용되어 집니다.
+   (bool, dis_max : 뒤에 설명, constant score 쿼리 : 전문 텍스트 쿼리는 가장 일치하는 도큐먼트를 찾기 위해 스코어링 메커니즘이 필요하지만
+   constant score 쿼리를 사용하면 스코어가 없는 쿼리로 변환할 수 있음)
+ - 쿼리 절은 query context 또는 filter context에 사용되는지 여부에 따라 다르게 동작 합니다.
+   query context : 이 문서가 query와 얼마나 잘 일치 합니까?
+                   _score를 사용하여 다른 문서와 비교하여 얼마나 잘 일치 하는지를 나타냄
+   filter context - 이 문서가 이 query 절과 일치 합니까? yes or no
+                    자주 사용되는 필터는 성능을 높이기 위해 Elasticsearch에 의해 자동으로 캐싱됨
+   자세한 사항은 여기 참고 https://www.elastic.co/guide/en/elasticsearch/reference/current/query-filter-context.html                
+
+2. 데이터 준비
+ 1) logstash가 설치된 디렉토리에 sample 폴더를 만들고 아래 url로 부터 파일을 다운로드
+  - https://github.com/cheonjeongdae/elasticsearch/tree/master/sample/study_data.json
+  - https://github.com/cheonjeongdae/elasticsearch/tree/master/sample/study_data.conf
+ 2) index 생성.
+  - kibana를 이용해서 아래 코드를 실행. curl로 실행해도 됨
+  PUT /slipp-study
+{
+  "settings": {
+    "index": {
+      "number_of_replicas": "1",
+      "number_of_shards": "1",
+      "analysis" : {
+        "analyzer" : {
+          "std" : {
+            "type" : "standard"
+          }
+        }
+      }
+    }
+  },
+  "mappings": {
+    "accessLog": {
+      "properties": {
+        "accessPointId": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "application": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "band": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "bandwidth": {
+          "type": "double"
+        },
+        "category": {
+          "type": "text",
+          "analyzer" : "std"
+        },
+        "customer": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "department": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "downloadCurrent": {
+          "type": "double"
+        },
+        "downloadTotal": {
+          "type": "integer"
+        },
+        "inactiveMs": {
+          "type": "integer"
+        },
+        "location": {
+          "type": "geo_point"
+        },
+        "mac": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "networkId": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "signalStrength": {
+          "type": "integer"
+        },
+        "time": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "uploadCurrent": {
+          "type": "double"
+        },
+        "uploadTotal": {
+          "type": "integer"
+        },
+        "usage": {
+          "type": "double"
+        },
+        "username": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer" : "std"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+ 3) 실행
+  - #logstash 설치경로 bin>logstash.bat -f ../sample/study_data.conf
+  * 1000건인데.... 왜 999건이 들어가지... ㅠ.ㅠ
+ 4) 부연 설명
+  - type : text, 전문 텍스트 검색 유용, 토큰화가 되는 텍스트 필드. 예) a nice text
+  - type : keyword, 문자열 필드 분석이 가능한 데이터, 정렬, 필터링, 집계 기능을 지원. 토큰화가 안 되는 텍스트 필드. 예) CODE011
+  - fields : 같은 필드를 다른 목적을 위해 다른 방법으로 처리돼야 하는 경우가 있다.
+             예를 들어 문자열 필드가 검색을 위해 토큰화 처리가 필요하고, 정렬을 위해 비토큰화 처리가 필요하다.
+             fields(예전에는 multi-field 라고 했고 지금은 fields 라고 함)를 정의해야 한다.
+             fields 속성은 같은 필드를 여러 가지 방식으로 사용할 수 있는 매핑에 있어 매우 강력한 기능이다.
+             https://www.elastic.co/guide/en/elasticsearch/reference/6.6/multi-fields.html
+
+3 내용 및 실습
+ - 검색 요청하기
+  GET /_search
+  GET /index/_search
+  GET /index/type_search
+ - Query DSL은 Http 요청 메시지 본문에 JSON 으로 query 속성 값을 사용한다.
+  GET /_search
+  {
+    "query" : {.... 질의 ....}
+  }
+ - 아래는 기본 옵션
+ 1) match_all
+  - 모든 문서와 매치함, 생략한 것과 결과가 같음
+ GET /_search
+ {
+  "query" : {
+    "match_all" : {}
+  }
+ 2) match
+  - 대부분의 전문 텍스트 검색 요구 사항에 사용하는 기본 쿼리.
+  - 적용 순서
+   가. 가장 일치하는 도큐먼트를 찾아 스코어에 따라 내림 차순으로 정렬
+   나. 도큐먼트가 같은 순서인 경우, 도큐먼트는 두 용어를 모두 갖고 있지만 같은 순서가 아니거나
+       서로 인접하지 않은 다른 도큐먼트 보다 더 높은 스코어를 가져야 함
+   다. 결과에 or 도 포함되나 낮은 스코어를 할당 한다.
+
+category
+
+GET /slipp-study/accessLog/_search
+{
+  "query": {
+    "match": {
+      "category": "Hogan Test Gaming"
+    }
+  },
+  "size": 100
+}
+
+ - 결과가 제대로 나오지 않는다. 왜 공백이 분할이 안될까?
+
+
+1. term 쿼리
+ - 정확한 값 매치로 작동 하면서 일반적으로 매우 바름, SQL '=' 와 비교 될 수 있음
+ 
+
+https://bakyeono.net/post/2016-08-20-elasticsearch-querydsl-basic.html
+
+
+PUT /slipp-study
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "std" : {
+          "type" : "standard"
+        }
+      }
+    }
+  },
+  "mapping": {
+    "accessLog": {
+      "properties": {
+        "category": {
+          "type": "text",
+          "analyzer" : "std"
+        }
+      }
+    }
+  }
+}
