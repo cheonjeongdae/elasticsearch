@@ -157,6 +157,119 @@
   }
 }
 
+PUT /slipp-study1
+{
+  "settings": {
+    "index": {
+      "number_of_replicas": "1",
+      "number_of_shards": "1",
+      "analysis" : {
+        "analyzer" : {
+          "std" : {
+            "type" : "standard"
+          }
+        }
+      }
+    }
+  },
+  "mappings": {
+    "accessLog": {
+      "properties": {
+        "accessPointId": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "application": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "band": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "bandwidth": {
+          "type": "double"
+        },
+        "category": {
+          "type": "text",
+          "analyzer" : "std"
+        },
+        "customer": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "department": {
+          "type": "text"
+        },
+        "downloadCurrent": {
+          "type": "double"
+        },
+        "downloadTotal": {
+          "type": "integer"
+        },
+        "inactiveMs": {
+          "type": "integer"
+        },
+        "location": {
+          "type": "geo_point"
+        },
+        "mac": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "networkId": {
+          "type": "keyword",
+          "fields": {
+            "analyzed": {
+              "type": "text"
+            }
+          }
+        },
+        "signalStrength": {
+          "type": "integer"
+        },
+        "time": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "uploadCurrent": {
+          "type": "double"
+        },
+        "uploadTotal": {
+          "type": "integer"
+        },
+        "usage": {
+          "type": "double"
+        },
+        "username": {
+          "type": "text",
+          "analyzer" : "std"
+        }
+      }
+    }
+  }
+}
+
  3) 실행
   - #logstash 설치경로 bin>logstash.bat -f ../sample/study_data.conf
   * 1000건인데.... 왜 999건이 들어가지... ㅠ.ㅠ
@@ -169,7 +282,8 @@
              fields 속성은 같은 필드를 여러 가지 방식으로 사용할 수 있는 매핑에 있어 매우 강력한 기능이다.
              https://www.elastic.co/guide/en/elasticsearch/reference/6.6/multi-fields.html
 
-3 내용 및 실습
+3 전문 텍스트 검색
+ - 그림 Term_Level_Query.png
  - 검색 요청하기
   GET /_search
   GET /index/_search
@@ -187,13 +301,153 @@
   "query" : {
     "match_all" : {}
   }
+  예) "match_all": { "boost" : 1.2 }
+  - "match_none": {} 은 match all의 반대 개념이다.
  2) match
-  - 대부분의 전문 텍스트 검색 요구 사항에 사용하는 기본 쿼리.
+  - 대부분의 전문 텍스트 검색 요구 사항에 사용하는 기본 쿼리. 기본 필드에 사용된 분석기를 인식하는 상위 레벨 쿼리 중 하나
+    * 상위 레벨 쿼리(High-Level Query) : 전문 텍스트 쿼리는 구조화 되지 않은 텍스트 필드에 수행할 수 있으며, 이러한 쿼리는
+      분석 과정으로 인식함. 전문 텍스트 쿼리는 실제 검색 연산을 수행하기 전에 검색 용어를 대상으로 분석을 실행함
+      우선 필드 레벨에 search_analyzer가 정의됐는지 확인해 올바른 분석기를 찾아내고, 필드 레벨 분석기가 정의되지 않았다면
+      색인 레벨에서 정의된 분석기를 찾는다. 따라서 전문 텍스트 쿼리는 기본 필드에 분석 과정을 인식하고 실제 검색 쿼리를 
+      구성하기 전에 올바른 분석 과정을 적용한다
+  GET /slipp-study1/_search
+{
+  "query": {
+    "match": {
+      "username": "Melvin Test1"
+    }
+  }
+}.
+  - 한글 깨지고, slipp-study, slipp-study1 의 차이점을 모르겠다.    
   - 적용 순서
-   가. 가장 일치하는 도큐먼트를 찾아 스코어에 따라 내림 차순으로 정렬
-   나. 도큐먼트가 같은 순서인 경우, 도큐먼트는 두 용어를 모두 갖고 있지만 같은 순서가 아니거나
-       서로 인접하지 않은 다른 도큐먼트 보다 더 높은 스코어를 가져야 함
-   다. 결과에 or 도 포함되나 낮은 스코어를 할당 한다.
+    => 가장 일치하는 도큐먼트를 찾아 스코어에 따라 내림 차순으로 정렬
+    => 도큐먼트가 같은 순서인 경우, 도큐먼트는 두 용어를 모두 갖고 있지만 같은 순서가 아니거나
+        서로 인접하지 않은 다른 도큐먼트 보다 더 높은 스코어를 가져야 함
+    => 결과에 or 도 포함되나 낮은 스코어를 할당 한다.
+    * slipp-study index 의 경우 적용 순서에 있는 것들이 잘 적용되지 않았다.
+      fields 의 문제인지, 아님 다른 이슈가 있는지 원인을 찾지 못했다.
+  - 몇가지 옵션이 있음
+   가. Operator
+       Match 절의 기본 동작은 or 연산자를 사용해 결과를 결합한다.
+       Operator를 사용해 and 연산을 할 수 있다.
+       GET /slipp-study1/_search
+{
+  "query": {
+    "match": {
+      "username": {
+        "query" : "Melvin Test1",
+        "operator": "and"
+      }
+    }
+  }
+}
+   나. minimum_should_match
+       or 연산자를 그대로 사용하되, 결과로 나오는 도큐먼트에서 일치하는 용어의 최소 개수를 지정할 수 있음
+       GET /slipp-study1/_search
+{
+  "query": {
+    "match": {
+      "username": {
+        "query" : "Melvin Test4",
+        "minimum_should_match": "1"
+      }
+    }
+  }
+}
+        로 했을 때 결과는 2로 했을 때는 1개가 나오지만, 1로 했을때는 5개가 나옴
+   다. Fuzziness
+       레벤슈타인 거리(Levenshtein edit distance) 알고리즘을 기반으로 하며, 원본 문자열을 다른 문자열로 변경하기 위한 편집 횟수를 측정
+       편집은 원문 용어에 있는 문자의 삽입, 삭제, 대체, 치환을 의미함. 매개 변수는 0, 1, 2, AUTO 값 중 하나를 사용할 수 있음
+       GET /slipp-study1/_search
+{
+  "query": {
+    "match": {
+      "username": {
+        "query" : "Hogen aest1",
+        "fuzziness": "1"
+      }
+    }
+  }
+}
+       Hogan => Hogen, Test1 => aest1 으로 검색했다. 1개가 틀린 글자 개수를 검색
+       일래스틱서치는 일치하는 용어를 추가로 만들어야 하므로 fuzziness 는 비용이 드는 작업
+       추가 매개 변수를 고려 해야 함
+       max_expansions : 확장 후 최대 용어 개수를 나타냄
+       prefix_length: 0, 1, 2 등의 숫자를 말함. fuzziness 검사 시작 시점을 prefix_length 매개 변수에 정의한 길이 이후로 지정
+  3) match phrase
+   - 용어를 분해하지 않고, 일련의 단어를 일치시키는 쿼리
+     인접한 단어가 정확한 순서를 갖는 단어를 찾을 때
+GET /slipp-study1/_search
+{
+  "query": {
+    "match_phrase": {
+      "username": {
+        "query": "Melvin Test",
+        "slop": 1
+      }
+    }
+  }
+}
+    - slop 매개 변수를 지정하여 쿼리 시점에 건너 뛸 수 있는 단어 개수를 설정 할 수 있음
+      0, 1, 2, 3 정수. 기본값은 0
+  4) match phrase_prefix
+   - phrase 랑 같은데 마지막 단어랑 일치하는 것의 개수를 찾는다.
+     default 값은 50이다. 아래 예제는 3을 줘서 처음 3개를 찾음
+ GET /slipp-study1/_search
+{
+  "query": {
+    "match_phrase_prefix": {
+      "username": {
+        "query": "Test",
+        "max_expansions": 3
+      }
+    }
+  }
+}    
+  5) Multi Match
+   - match 의 확장 버전으로 여러 필드에서 일치하는 쿼리를 실행 할 수 있음.
+     다양한 옵션을 지정해 도큐먼트의 전체 스코어를 지정할 수 있음
+     username 필드와 department 필드에서 develop or gilDong을 찾음
+GET /slipp-study1/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "develop gilDong",
+      "fields": [
+        "username",
+        "department"
+      ]
+    }
+  }
+}
+   - 특정 필드의 스코어 높히기 위해 department에 2배를 해 주면 정렬되는 컬럼 순서가 달라짐
+GET /slipp-study1/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "develop gilDong",
+      "fields": [
+        "username",
+        "department^2"
+      ]
+    }
+  }
+}
+
+4 복합 쿼리 작성
+ - 하나 이상의 쿼리를 결합해 더 복잡한 쿼리를 작성할 때 사용함
+  1) Constant score 쿼리
+
+
+
+
+
+
+
+
+
+
+
 
 category
 
